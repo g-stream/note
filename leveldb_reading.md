@@ -20,12 +20,23 @@
         
 
 - footer
-
+    - footer的结构：
+        |metaindex_block_handle|index_block_handle|padding_bytes|magic|
         每个table文件尾部的文件信息。
         每个table文件有两个block handler, 分别为metaindex block handler、index block handler。
-        每个footer encode后长度为最大值：2*BlockHandle::kMaxEncodedLength + 8（two block handles and a magic number，而两个block handler中存有offset和size数据，以Varint64形式存储，kMaxEncodedLength = 10 + 10）。
+        每个footer encode后长度为固定值：2*BlockHandle::kMaxEncodedLength + 8（two block handles and a magic number，而两个block handler中存有offset和size数据，以Varint64形式存储，kMaxEncodedLength = 10 + 10，为了达到最大长度，两个block handler存完后添加padding bytes，最后再加上8字节长的magic number）。
 
 - block
   
         leveldb 数据内容的是以block存放的。
 
+- user_key and internal_key
+    leveldb中对userkey附加了一些信息作为internal_key。首先是，leveldb中要删除key时，不会直接找到key存储的位置删除，而是通过插入一个标记有kTypeDeletion的key，告知这个key已经被删除了，当往下层merge操作时再对其进行删除操作。但这也会引发问题，对于两个sst中同样的key，如何确定哪个是最新的值？leveldb中，对每个entry还加入了sequence number，这是一个增的uint56,seq较大的那个entry即为最新的值。
+    所以internal_key == |user_key|sequence_number|Ktype(kTypeValue/kTypeDeletion)|, 后两者，kType占用8bits，sequence_number 占用56bits，两者共占用8bytes。存储时，这8bytes附在user_key后面，成为internal_key的data。
+    比较internal_key时，先比较其user_key的大小，如果一样大，则比较其sequence_number的大小。这里可以看到把sequence_number放到kType前面的好处，我们把sequence_number与kType合起来的那个8bytes当作uint64来比较就好了。
+
+- log 
+    - header
+        结构：
+        |checksum(4bytes)|length(2bytes)|record_type(1byte)|
+        record_type有如下几种：  kZeroType，kFullType，kFirstType，kMiddleType，kLastType。
