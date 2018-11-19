@@ -52,7 +52,9 @@ tree libuv-v1.9.1 -L 1
 - 类似linux内核list的浸入式容器设计。
 
     在src/tree.h, src/queue.h中。将提供操作的数据结构嵌入被操作的数据结构中，通过对嵌入式结构的指针等操作实现queue，rbtree，spraytree等数据结构；通过container_of的宏，计算嵌入位置的offset来取得container。
+- c语言的面向对象编程。
 
+    不同的平台，系统的api不同。同样的功能，针对不同的系统，提供不同的实现方法。具体做法是，对一个结构体，其中某种功能相关的field字段用宏表示，结构体中直接填入宏，然后每个平台的具体实现这个field
 
 ```
 #define container_of(ptr, type, member) \
