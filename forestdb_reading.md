@@ -109,3 +109,22 @@ BsArray：
  *
  * kvMeta[i].isPtr: boolean flag that indicates if
  *                  KV i contains pointer (true) or binary data (false).
+
+ # btree.h/cc btree_new.h/cc
+这应该是两个版本的b树，新版本中的b树实现有什么不同之处呢？
+
+
+btree:
+BtreeNodeAddr 四个属性:offset、 ptr、isDirty、isEmpty
+                 offset       isDirty    isEmpty   ptr
+pointer value     -             true        false   value
+empty pointer     BLK_NOT_FOUND  false       true    -
+binary data value  value offset   false       false  -
+offset、ptr只用到一个，故写在一个union中
+
+BtreeKvPair: key value keylen valuelen
+BtreeKey: data length
+
+btree_new:
+BtreeV2Meta：元信息
+多了个NodeActionType用于add、remove、replace操作。
