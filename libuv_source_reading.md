@@ -203,7 +203,7 @@ struct uv__work {
 
 这是内部用的结构体，用户用uv_work这个request来传入loop将requset插入loop->
 
-//src/threadpool.c 
+/src/threadpool.c 
 
 
 static uv_once_t once = UV_ONCE_INIT;
@@ -312,3 +312,637 @@ static void init_once(void) {
 
 /src/heap-inl.h
 最小堆实现
+
+
+/src/unix/fs.c
+针对unix系统的文件操作实现，通过uv__fs_work传递给线程池来处理。将其赋给struct worker中的字段。
+```
+static void uv__fs_work(struct uv__work* w) {
+  int retry_on_eintr;
+  uv_fs_t* req;
+  ssize_t r;
+
+  req = container_of(w, uv_fs_t, work_req);
+  retry_on_eintr = !(req->fs_type == UV_FS_CLOSE);
+
+  do {
+    errno = 0;
+
+#define X(type, action)                                                       \
+  case UV_FS_ ## type:                                                        \
+    r = action;                                                               \
+    break;
+
+    switch (req->fs_type) {
+    X(ACCESS, access(req->path, req->flags));
+    X(CHMOD, chmod(req->path, req->mode));
+    X(CHOWN, chown(req->path, req->uid, req->gid));
+    X(CLOSE, close(req->file));
+    X(FCHMOD, fchmod(req->file, req->mode));
+    X(FCHOWN, fchown(req->file, req->uid, req->gid));
+    X(FDATASYNC, uv__fs_fdatasync(req));
+    X(FSTAT, uv__fs_fstat(req->file, &req->statbuf));
+    X(FSYNC, fsync(req->file));
+    X(FTRUNCATE, ftruncate(req->file, req->off));
+    X(FUTIME, uv__fs_futime(req));
+    X(LSTAT, uv__fs_lstat(req->path, &req->statbuf));
+    X(LINK, link(req->path, req->new_path));
+    X(MKDIR, mkdir(req->path, req->mode));
+    X(MKDTEMP, uv__fs_mkdtemp(req));
+    X(OPEN, uv__fs_open(req));
+    X(READ, uv__fs_buf_iter(req, uv__fs_read));
+    X(SCANDIR, uv__fs_scandir(req));
+    X(READLINK, uv__fs_readlink(req));
+    X(REALPATH, uv__fs_realpath(req));
+    X(RENAME, rename(req->path, req->new_path));
+    X(RMDIR, rmdir(req->path));
+    X(SENDFILE, uv__fs_sendfile(req));
+    X(STAT, uv__fs_stat(req->path, &req->statbuf));
+    X(SYMLINK, symlink(req->path, req->new_path));
+    X(UNLINK, unlink(req->path));
+    X(UTIME, uv__fs_utime(req));
+    X(WRITE, uv__fs_buf_iter(req, uv__fs_write));
+    default: abort();
+    }
+#undef X
+  } while (r == -1 && errno == EINTR && retry_on_eintr);
+
+  if (r == -1)
+    req->result = -errno;
+  else
+    req->result = r;
+
+  if (r == 0 && (req->fs_type == UV_FS_STAT ||
+                 req->fs_type == UV_FS_FSTAT ||
+                 req->fs_type == UV_FS_LSTAT)) {
+    req->ptr = &req->statbuf;
+  }
+}
+```
+uv__fs_xxx 是对文件io系统api的封装，如果系统不提供相关api，libuv还会自己实现，如用普通api实现了sendfile。
+
+至于用户如何用该组api呢，libuv又进行了进一步封装,以chmod为例：
+```
+
+int uv_fs_chmod(uv_loop_t* loop,
+                uv_fs_t* req,
+                const char* path,
+                int mode,
+                uv_fs_cb cb) {
+  INIT(CHMOD);                        //以UV_FS_CHMOD的type初始化fs request
+  PATH;
+  req->mode = mode;
+  POST;                               //根据是否有cb函数，将request插入到线程池队列或直接运行uv__fs_work
+}
+
+#define INIT(subtype)                                                         \
+  do {                                                                        \
+    req->type = UV_FS;                                                        \
+    if (cb != NULL)                                                           \
+      uv__req_init(loop, req, UV_FS);                                         \
+    req->fs_type = UV_FS_ ## subtype;                                         \
+    req->result = 0;                                                          \
+    req->ptr = NULL;                                                          \
+    req->loop = loop;                                                         \
+    req->path = NULL;                                                         \
+    req->new_path = NULL;                                                     \
+    req->cb = cb;                                                             \
+  }                                                                           \
+  while (0)
+
+//只带一个路径信息的fs操作
+#define PATH                                                                  \
+  do {                                                                        \
+    assert(path != NULL);                                                     \
+    if (cb == NULL) {                                                         \
+      req->path = path;                                                       \
+    } else {                                                                  \
+      req->path = uv__strdup(path);                                           \
+      if (req->path == NULL) {                                                \
+        uv__req_unregister(loop, req);                                        \
+        return -ENOMEM;                                                       \
+      }                                                                       \
+    }                                                                         \
+  }                                                                           \
+  while (0)
+//带两个路径信息的fs操作
+#define PATH2                                                                 \
+  do {                                                                        \
+    if (cb == NULL) {                                                         \
+      req->path = path;                                                       \
+      req->new_path = new_path;                                               \
+    } else {                                                                  \
+      size_t path_len;                                                        \
+      size_t new_path_len;                                                    \
+      path_len = strlen(path) + 1;                                            \
+      new_path_len = strlen(new_path) + 1;                                    \
+      req->path = uv__malloc(path_len + new_path_len);                        \
+      if (req->path == NULL) {                                                \
+        uv__req_unregister(loop, req);                                        \
+        return -ENOMEM;                                                       \
+      }                                                                       \
+      req->new_path = req->path + path_len;                                   \
+      memcpy((void*) req->path, path, path_len);                              \
+      memcpy((void*) req->new_path, new_path, new_path_len);                  \
+    }                                                                         \
+  }                                                                           \
+  while (0)
+
+#define POST                                                                  \
+  do {                                                                        \
+    if (cb != NULL) {                                                         \
+      uv__work_submit(loop, &req->work_req, uv__fs_work, uv__fs_done);        \
+      return 0;                                                               \
+    }                                                                         \
+    else {                                                                    \
+      uv__fs_work(&req->work_req);                                            \
+      return req->result;                                                     \
+    }                                                                         \
+  }                                                                           \
+  while (0)
+
+
+```
+
+
+/src/unix/core.c
+loop运行核心：
+```
+int uv_run(uv_loop_t* loop, uv_run_mode mode) {
+  int timeout;
+  int r;
+  int ran_pending;
+
+  r = uv__loop_alive(loop);
+  if (!r)
+    uv__update_time(loop);
+
+  while (r != 0 && loop->stop_flag == 0) {
+    uv__update_time(loop);                 //循环开始时更新时间
+    uv__run_timers(loop);                  //运行注册的定时器
+    ran_pending = uv__run_pending(loop);   //运行loop->pending_queue中的回调函数
+    uv__run_idle(loop);                    //运行注册的idle任务
+    uv__run_prepare(loop);                 //运行注册的prepare任务  （这里idle、prepare与check实现方式其实没有差别，由loop-watcher.c中的同一套宏生成）
+
+    timeout = 0;
+    if ((mode == UV_RUN_ONCE && !ran_pending) || mode == UV_RUN_DEFAULT)
+      timeout = uv_backend_timeout(loop);
+
+    uv__io_poll(loop, timeout);            //io多路复用不同的系统调用不同的底层api实现
+    uv__run_check(loop);
+    uv__run_closing_handles(loop);         //对于loop->close_handles链表上的各handle将其unref、从loop->handle_queue中移除最后调用handle->close_cb回调函数
+
+    if (mode == UV_RUN_ONCE) {
+      /* UV_RUN_ONCE implies forward progress: at least one callback must have
+       * been invoked when it returns. uv__io_poll() can return without doing
+       * I/O (meaning: no callbacks) when its timeout expires - which means we
+       * have pending timers that satisfy the forward progress constraint.
+       *
+       * UV_RUN_NOWAIT makes no guarantees about progress so it's omitted from
+       * the check.
+       */
+      uv__update_time(loop);
+      uv__run_timers(loop);
+    }
+
+    r = uv__loop_alive(loop);
+    if (mode == UV_RUN_ONCE || mode == UV_RUN_NOWAIT)
+      break;
+  }
+
+  /* The if statement lets gcc compile it to a conditional store. Avoids
+   * dirtying a cache line.
+   */
+  if (loop->stop_flag != 0)
+    loop->stop_flag = 0;
+
+  return r;
+}
+
+```
+
+各handle close的方式： 
+
+```
+1. 通过调用，handle->flag中set UV_CLOSING位，关闭相关资源，并将handle加到loop->closeing_handles链表头上
+void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
+  assert(!(handle->flags & (UV_CLOSING | UV_CLOSED)));
+
+  handle->flags |= UV_CLOSING;
+  handle->close_cb = close_cb;
+
+  switch (handle->type) {
+  case UV_NAMED_PIPE:
+    uv__pipe_close((uv_pipe_t*)handle);
+    break;
+
+  case UV_TTY:
+    uv__stream_close((uv_stream_t*)handle);
+    break;
+
+  case UV_TCP:
+    uv__tcp_close((uv_tcp_t*)handle);
+    break;
+
+  case UV_UDP:
+    uv__udp_close((uv_udp_t*)handle);
+    break;
+
+  case UV_PREPARE:
+    uv__prepare_close((uv_prepare_t*)handle);
+    break;
+
+  case UV_CHECK:
+    uv__check_close((uv_check_t*)handle);
+    break;
+
+  case UV_IDLE:
+    uv__idle_close((uv_idle_t*)handle);
+    break;
+
+  case UV_ASYNC:
+    uv__async_close((uv_async_t*)handle);
+    break;
+
+  case UV_TIMER:
+    uv__timer_close((uv_timer_t*)handle);
+    break;
+
+  case UV_PROCESS:
+    uv__process_close((uv_process_t*)handle);
+    break;
+
+  case UV_FS_EVENT:
+    uv__fs_event_close((uv_fs_event_t*)handle);
+    break;
+
+  case UV_POLL:
+    uv__poll_close((uv_poll_t*)handle);
+    break;
+
+  case UV_FS_POLL:
+    uv__fs_poll_close((uv_fs_poll_t*)handle);
+    break;
+
+  case UV_SIGNAL:
+    uv__signal_close((uv_signal_t*) handle);
+    /* Signal handles may not be closed immediately. The signal code will */
+    /* itself close uv__make_close_pending whenever appropriate. */
+    return;
+
+  default:
+    assert(0);
+  }
+
+  uv__make_close_pending(handle);
+}
+
+void uv__make_close_pending(uv_handle_t* handle) {
+  assert(handle->flags & UV_CLOSING);
+  assert(!(handle->flags & UV_CLOSED));
+  handle->next_closing = handle->loop->closing_handles;
+  handle->loop->closing_handles = handle;
+}
+
+2. loop循环中通过uv__run_closing_handles(loop)。对于loop->close_handles链表上的各handle将其unref、从loop->handle_queue中移除最后调用handle->close_cb回调函数
+我们可以看到其close_cb是一起调用的不知道这里是否有运行效率的考虑。
+
+static void uv__finish_close(uv_handle_t* handle) {
+  /* Note: while the handle is in the UV_CLOSING state now, it's still possible
+   * for it to be active in the sense that uv__is_active() returns true.
+   * A good example is when the user calls uv_shutdown(), immediately followed
+   * by uv_close(). The handle is considered active at this point because the
+   * completion of the shutdown req is still pending.
+   */
+  assert(handle->flags & UV_CLOSING);
+  assert(!(handle->flags & UV_CLOSED));
+  handle->flags |= UV_CLOSED;
+
+  switch (handle->type) {
+    case UV_PREPARE:
+    case UV_CHECK:
+    case UV_IDLE:
+    case UV_ASYNC:
+    case UV_TIMER:
+    case UV_PROCESS:
+    case UV_FS_EVENT:
+    case UV_FS_POLL:
+    case UV_POLL:
+    case UV_SIGNAL:
+      break;
+
+    case UV_NAMED_PIPE:
+    case UV_TCP:
+    case UV_TTY:
+      uv__stream_destroy((uv_stream_t*)handle);
+      break;
+
+    case UV_UDP:
+      uv__udp_finish_close((uv_udp_t*)handle);
+      break;
+
+    default:
+      assert(0);
+      break;
+  }
+
+  uv__handle_unref(handle);
+  QUEUE_REMOVE(&handle->handle_queue);
+
+  if (handle->close_cb) {
+    handle->close_cb(handle);
+  }
+}
+
+```
+
+/src/unix/linux-core.c
+看一下封装了epoll的loop
+
+```
+
+void uv__io_poll(uv_loop_t* loop, int timeout) {
+  /* A bug in kernels < 2.6.37 makes timeouts larger than ~30 minutes
+   * effectively infinite on 32 bits architectures.  To avoid blocking
+   * indefinitely, we cap the timeout and poll again if necessary.
+   *
+   * Note that "30 minutes" is a simplification because it depends on
+   * the value of CONFIG_HZ.  The magic constant assumes CONFIG_HZ=1200,
+   * that being the largest value I have seen in the wild (and only once.)
+   */
+  static const int max_safe_timeout = 1789569;
+  static int no_epoll_pwait;
+  static int no_epoll_wait;
+  struct uv__epoll_event events[1024];
+  struct uv__epoll_event* pe;
+  struct uv__epoll_event e;
+  int real_timeout;
+  QUEUE* q;
+  uv__io_t* w;
+  sigset_t sigset;
+  uint64_t sigmask;
+  uint64_t base;
+  int have_signals;
+  int nevents;
+  int count;
+  int nfds;
+  int fd;
+  int op;
+  int i;
+
+  if (loop->nfds == 0) {
+    assert(QUEUE_EMPTY(&loop->watcher_queue));
+    return;
+  }
+
+  while (!QUEUE_EMPTY(&loop->watcher_queue)) {
+    q = QUEUE_HEAD(&loop->watcher_queue);
+    QUEUE_REMOVE(q);
+    QUEUE_INIT(q);
+
+    w = QUEUE_DATA(q, uv__io_t, watcher_queue);
+    assert(w->pevents != 0);
+    assert(w->fd >= 0);
+    assert(w->fd < (int) loop->nwatchers);
+
+    e.events = w->pevents;
+    e.data = w->fd;
+
+    if (w->events == 0)
+      op = UV__EPOLL_CTL_ADD;
+    else
+      op = UV__EPOLL_CTL_MOD;
+
+    /* XXX Future optimization: do EPOLL_CTL_MOD lazily if we stop watching
+     * events, skip the syscall and squelch the events after epoll_wait().
+     */
+    if (uv__epoll_ctl(loop->backend_fd, op, w->fd, &e)) {
+      if (errno != EEXIST)
+        abort();
+
+      assert(op == UV__EPOLL_CTL_ADD);
+
+      /* We've reactivated a file descriptor that's been watched before. */
+      if (uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_MOD, w->fd, &e))
+        abort();
+    }
+
+    w->events = w->pevents;
+  }
+
+  sigmask = 0;
+  if (loop->flags & UV_LOOP_BLOCK_SIGPROF) {
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGPROF);
+    sigmask |= 1 << (SIGPROF - 1);
+  }
+
+  assert(timeout >= -1);
+  base = loop->time;
+  count = 48; /* Benchmarks suggest this gives the best throughput. */
+  real_timeout = timeout;
+
+  for (;;) {
+    /* See the comment for max_safe_timeout for an explanation of why
+     * this is necessary.  Executive summary: kernel bug workaround.
+     */
+    if (sizeof(int32_t) == sizeof(long) && timeout >= max_safe_timeout)
+      timeout = max_safe_timeout;
+
+    if (sigmask != 0 && no_epoll_pwait != 0)
+      if (pthread_sigmask(SIG_BLOCK, &sigset, NULL))
+        abort();
+
+    if (no_epoll_wait != 0 || (sigmask != 0 && no_epoll_pwait == 0)) {
+      nfds = uv__epoll_pwait(loop->backend_fd,
+                             events,
+                             ARRAY_SIZE(events),
+                             timeout,
+                             sigmask);
+      if (nfds == -1 && errno == ENOSYS)
+        no_epoll_pwait = 1;
+    } else {
+      nfds = uv__epoll_wait(loop->backend_fd,
+                            events,
+                            ARRAY_SIZE(events),
+                            timeout);
+      if (nfds == -1 && errno == ENOSYS)
+        no_epoll_wait = 1;
+    }
+
+    if (sigmask != 0 && no_epoll_pwait != 0)
+      if (pthread_sigmask(SIG_UNBLOCK, &sigset, NULL))
+        abort();
+
+    /* Update loop->time unconditionally. It's tempting to skip the update when
+     * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
+     * operating system didn't reschedule our process while in the syscall.
+     */
+    SAVE_ERRNO(uv__update_time(loop));
+
+    if (nfds == 0) {
+      assert(timeout != -1);
+
+      timeout = real_timeout - timeout;
+      if (timeout > 0)
+        continue;
+
+      return;
+    }
+
+    if (nfds == -1) {
+      if (errno == ENOSYS) {
+        /* epoll_wait() or epoll_pwait() failed, try the other system call. */
+        assert(no_epoll_wait == 0 || no_epoll_pwait == 0);
+        continue;
+      }
+
+      if (errno != EINTR)
+        abort();
+
+      if (timeout == -1)
+        continue;
+
+      if (timeout == 0)
+        return;
+
+      /* Interrupted by a signal. Update timeout and poll again. */
+      goto update_timeout;
+    }
+
+    have_signals = 0;
+    nevents = 0;
+
+    assert(loop->watchers != NULL);
+    loop->watchers[loop->nwatchers] = (void*) events;
+    loop->watchers[loop->nwatchers + 1] = (void*) (uintptr_t) nfds;
+    for (i = 0; i < nfds; i++) {
+      pe = events + i;
+      fd = pe->data;
+
+      /* Skip invalidated events, see uv__platform_invalidate_fd */
+      if (fd == -1)
+        continue;
+
+      assert(fd >= 0);
+      assert((unsigned) fd < loop->nwatchers);
+
+      w = loop->watchers[fd];
+
+      if (w == NULL) {
+        /* File descriptor that we've stopped watching, disarm it.
+         *
+         * Ignore all errors because we may be racing with another thread
+         * when the file descriptor is closed.
+         */
+        uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, fd, pe);
+        continue;
+      }
+
+      /* Give users only events they're interested in. Prevents spurious
+       * callbacks when previous callback invocation in this loop has stopped
+       * the current watcher. Also, filters out events that users has not
+       * requested us to watch.
+       */
+      pe->events &= w->pevents | POLLERR | POLLHUP;
+
+      /* Work around an epoll quirk where it sometimes reports just the
+       * EPOLLERR or EPOLLHUP event.  In order to force the event loop to
+       * move forward, we merge in the read/write events that the watcher
+       * is interested in; uv__read() and uv__write() will then deal with
+       * the error or hangup in the usual fashion.
+       *
+       * Note to self: happens when epoll reports EPOLLIN|EPOLLHUP, the user
+       * reads the available data, calls uv_read_stop(), then sometime later
+       * calls uv_read_start() again.  By then, libuv has forgotten about the
+       * hangup and the kernel won't report EPOLLIN again because there's
+       * nothing left to read.  If anything, libuv is to blame here.  The
+       * current hack is just a quick bandaid; to properly fix it, libuv
+       * needs to remember the error/hangup event.  We should get that for
+       * free when we switch over to edge-triggered I/O.
+       */
+      if (pe->events == POLLERR || pe->events == POLLHUP)
+        pe->events |= w->pevents & (POLLIN | POLLOUT);
+
+      if (pe->events != 0) {
+        /* Run signal watchers last.  This also affects child process watchers
+         * because those are implemented in terms of signal watchers.
+         */
+        if (w == &loop->signal_io_watcher)
+          have_signals = 1;
+        else
+          w->cb(loop, w, pe->events);
+
+        nevents++;
+      }
+    }
+
+    if (have_signals != 0)
+      loop->signal_io_watcher.cb(loop, &loop->signal_io_watcher, POLLIN);
+
+    loop->watchers[loop->nwatchers] = NULL;
+    loop->watchers[loop->nwatchers + 1] = NULL;
+
+    if (have_signals != 0)
+      return;  /* Event loop should cycle now so don't poll again. */
+
+    if (nevents != 0) {
+      if (nfds == ARRAY_SIZE(events) && --count != 0) {
+        /* Poll for more events but don't block this time. */
+        timeout = 0;
+        continue;
+      }
+      return;
+    }
+
+    if (timeout == 0)
+      return;
+
+    if (timeout == -1)
+      continue;
+
+update_timeout:
+    assert(timeout > 0);
+
+    real_timeout -= (loop->time - base);
+    if (real_timeout <= 0)
+      return;
+
+    timeout = real_timeout;
+  }
+}
+
+
+uint64_t uv__hrtime(uv_clocktype_t type) {
+  static clock_t fast_clock_id = -1;
+  struct timespec t;
+  clock_t clock_id;
+
+  /* Prefer CLOCK_MONOTONIC_COARSE if available but only when it has
+   * millisecond granularity or better.  CLOCK_MONOTONIC_COARSE is
+   * serviced entirely from the vDSO, whereas CLOCK_MONOTONIC may
+   * decide to make a costly system call.
+   */
+  /* TODO(bnoordhuis) Use CLOCK_MONOTONIC_COARSE for UV_CLOCK_PRECISE
+   * when it has microsecond granularity or better (unlikely).
+   */
+  if (type == UV_CLOCK_FAST && fast_clock_id == -1) {
+    if (clock_getres(CLOCK_MONOTONIC_COARSE, &t) == 0 &&
+        t.tv_nsec <= 1 * 1000 * 1000) {
+      fast_clock_id = CLOCK_MONOTONIC_COARSE;
+    } else {
+      fast_clock_id = CLOCK_MONOTONIC;
+    }
+  }
+
+  clock_id = CLOCK_MONOTONIC;
+  if (type == UV_CLOCK_FAST)
+    clock_id = fast_clock_id;
+
+  if (clock_gettime(clock_id, &t))
+    return 0;  /* Not really possible. */
+
+  return t.tv_sec * (uint64_t) 1e9 + t.tv_nsec;
+}
+
+```
