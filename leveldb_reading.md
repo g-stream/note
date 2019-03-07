@@ -43,4 +43,27 @@
 
 
 通过这些数据格式，我们应该能看出leveldb底层的文件是以什么样的格式存放数据的。相关的代码主要放在table文件夹下，与db的log_writer.h、log_writer.cc中。
-每个
+每个sst文件中放置一串block文件段，后附有metaindex、blockindex计录其offset与size。sst的inerator具体实现在two_level_iterator.h/cc中大致思想类似去图书馆中找书，先找到对应的书架，后从书架中找到对应的书。
+
+
+leveldb会生成的文件类型：
+```
+enum FileType {
+  kLogFile,
+  kDBLockFile,
+  kTableFile,
+  kDescriptorFile,
+  kCurrentFile,
+  kTempFile,
+  kInfoLogFile  // Either the current one, or an old one
+};
+```
+
+memtable.h/cc
+实现了内存中的sst，内部是一个[skip list](https://en.wikipedia.org/wiki/Skip_list)。
+大致原理是，一个随机高度的递增链表。每个结点带有一个高度值，每个高度有一个指针指向下一个高度大于该指针所在高度的结点的同高度的结点，如没有下个结点，则指向NULL。查找时从第一个节点的最高指针开始，如果下个结点比被查找元素小则向前，否则下降高度重复。插入时，随机生成高度，维护所有高度的指针。
+
+
+snapshot.h
+快照功能，代码很简单，只是一个保存sequence的链表。leveldb中每个键值对在插入时，use_key都会被算成internal_key。internal_key == userkey+sequence+valuetype(normal or delete)。sequence是一个递增的数，每插入一次加一。故可以以此表示一个快照，恢复时滤过大于保存值的kv对即可。
+
