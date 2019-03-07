@@ -40,3 +40,7 @@
         结构：
         |checksum(4bytes)|length(2bytes)|record_type(1byte)|
         record_type有如下几种：  kZeroType，kFullType，kFirstType，kMiddleType，kLastType。
+
+
+通过这些数据格式，我们应该能看出leveldb底层的文件是以什么样的格式存放数据的。相关的代码主要放在table文件夹下，与db的log_writer.h、log_writer.cc中。
+每个

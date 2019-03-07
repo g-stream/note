@@ -605,7 +605,7 @@ void uv__make_close_pending(uv_handle_t* handle) {
 }
 
 2. loop循环中通过uv__run_closing_handles(loop)。对于loop->close_handles链表上的各handle将其unref、从loop->handle_queue中移除最后调用handle->close_cb回调函数
-我们可以看到其close_cb是一起调用的不知道这里是否有运行效率的考虑。
+我们可以看到其close_cb是一起调用的不知道这里是否有运行效率的考虑。我觉得这是有点像linux中断处理中的上半部与下半部机制，中断处理需要很快完成以不影响进程运行，而中断有时会需要处理一点耗时的操作，这时候最好的方法是放入中断处理下半部中推后运行。这里应该也是类似的想法，推后到loop中的uv__run_closing_handles运行。
 
 static void uv__finish_close(uv_handle_t* handle) {
   /* Note: while the handle is in the UV_CLOSING state now, it's still possible
