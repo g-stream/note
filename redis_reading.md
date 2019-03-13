@@ -66,3 +66,67 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 ```
 以不同的sdshdr表示不同长度的字符串，对一个sds，实际上分配对应sdshdr空间加上一个data段的buf的长度的空间，并以sdshdr中的data段地址开始存字符串（结尾存放'\0'，以保证与c字符串的兼容，strcpy等;同时，len信息的存在保证了它二进制安全，能存放图片，视频等二进制文件），用data开始的字段表示这个sds。sdshdr中带有长度信息，相较于c字符串，它以O(1)复杂度求len，并且有了长度信息后更安全，防止越界错误。
 sdshdr中还保存free表示buf可用空间。通过buf的预分配，一些小修改只需要运用剩下的buf就行，优化操作。
+
+## object
+
+
+
+
+```
+/* A redis object, that is a type able to hold a string / list / set */
+
+/* The actual Redis Object */
+#define OBJ_STRING 0    /* String object. */
+#define OBJ_LIST 1      /* List object. */
+#define OBJ_SET 2       /* Set object. */
+#define OBJ_ZSET 3      /* Sorted set object. */
+#define OBJ_HASH 4      /* Hash object. */
+
+/* The "module" object type is a special one that signals that the object
+ * is one directly managed by a Redis module. In this case the value points
+ * to a moduleValue struct, which contains the object value (which is only
+ * handled by the module itself) and the RedisModuleType struct which lists
+ * function pointers in order to serialize, deserialize, AOF-rewrite and
+ * free the object.
+ *
+ * Inside the RDB file, module types are encoded as OBJ_MODULE followed
+ * by a 64 bit module type ID, which has a 54 bits module-specific signature
+ * in order to dispatch the loading to the right module, plus a 10 bits
+ * encoding version. */
+#define OBJ_MODULE 5    /* Module object. */
+#define OBJ_STREAM 6    /* Stream object. */
+	  
+
+/* Objects encoding. Some kind of objects like Strings and Hashes can be
+ * internally represented in multiple ways. The 'encoding' field of the object
+  * is set to one of this fields for this object. */
+  #define OBJ_ENCODING_RAW 0     /* Raw representation */
+  #define OBJ_ENCODING_INT 1     /* Encoded as integer */
+  #define OBJ_ENCODING_HT 2      /* Encoded as hash table */
+  #define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
+  #define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
+  #define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
+  #define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
+  #define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
+  #define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
+  #define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
+  #define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
+```
+
+## HyperLogLog
+
+该算法用来估计一个集合的基数，属于概率算法，返回一个近似的结果。但是大节省了内存。其的原理大致来说就是，对一次抛硬币的伯努力事件，以第一次出现反面的时候抛硬币的次数k来估算共抛了2^k次。为了减少误差，多次抛硬币的过程，分别计下其第一次出现反面时抛的次数，以次数的最大值来估计。
+
+dense:
+`11000000|222211|33333322|55444444|....`
+连续存储6bits长的uint。
+对6bit uint的在char数组中的index，用如下公式求得：
+> b0 = 6 * pos / 8
+offset，用如下公式：
+> fb = 6 * pos % 8
+怎么操作6 bits的register，redis设计了一套宏操作：
+```
+
+
+
+## GEO
