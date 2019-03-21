@@ -1,6 +1,7 @@
 * 基础知识
 ** 算法与数据结构与设计
 *** 手写lru
+lru/2 双链策略。linux用于页高速缓存的结构。linux维护两个链表：活跃链表与非活跃链表。牌活跃链表上的页面被认为是热的且不会被换出，而在非活跃链表上的页面则是可被换出的。在活跃链表中的页面必须在其被访问时处于非活跃链表中。两个链表都被伪lru规则维护：页面从尾部加入，从头部移除，如同队列。两个链表需要维持平衡，如果活跃链表变得过多而超过了非活跃链表，那么活跃链表的对页面将被重新回到非活跃链表中，以便能再被回收。
 *** 如何讲一个文件快速下发到100w个服务器
 *** 实现一个二叉树持久化方案
 *** 50亿个整数中，找一个确定的数（有内存限制，并且无序）
@@ -42,14 +43,240 @@
 *** 红黑树
 *** avl树
 *** b树b+树，及其区别
-*** hash
+*** has
 ** 设计模式
 *** 装饰器模式
 装饰器模式（Decorator Pattern）允许向一个现有的对象添加新的功能，同时又不改变其结构。这种类型的设计模式属于结构型模式，它是作为现有的类的一个包装。
 这种模式创建了一个装饰类，用来包装原有的类，并在保持类方法签名完整性的前提下，提供了额外的功能。
 http://www.runoob.com/design-pattern/decorator-pattern.html
+1，接口的一致性；装饰对象的接口必须与它所装饰的Component的接口是一致的，因此，所有的ConcreteDecorator类必须有一个公共的父类；这样对于用户来说，就是统一的接口；
+
+
+2，省略抽象的Decorator类；当仅需要添加一个职责时，没有必要定义抽象Decorator类。因为我们常常要处理，现存的类层次结构而不是设计一个新系统，这时可以把Decorator向Component转发请求的职责合并到ConcreteDecorator中；
+
+
+3，保持Component类的简单性；为了保证接口的一致性，组件和装饰必须要有一个公共的Component类，所以保持这个Component类的简单性是非常重要的，所以，这个Component类应该集中于定义接口而不是存储数据。对数据表示的定义应延迟到子类中，否则Component类会变得过于复杂和臃肿，因而难以大量使用。赋予Component类太多的功能，也使得具体的子类有一些它们它们不需要的功能大大增大；
+
+
+4，Component类在Decorator模式中充当抽象接口的角色，不应该去实现具体的行为。而且Decorator类对于Component类应该透明，换言之Component类无需知道Decorator类，Decorator类是从外部来扩展Component类的功能；
+
+5，Decorator类在接口上表现为“is-a”Component的继承关系，即Decorator类继承了Component类所具有的接口。但在实现上又表现为“has-a”Component的组合关系，即Decorator类又使用了另外一个Component类。我们可以使用一个或者多个Decorator对象来“装饰”一个Component对象，且装饰后的对象仍然是一个Component对象；,
+
+6，Decortor模式并非解决“多子类衍生的多继承”问题，Decorator模式的应用要点在于解决“主体类在多个方向上的扩展功能”——是为“装饰”的含义；
+
+
+7，对于Decorator模式在实际中的运用可以很灵活。如果只有一个ConcreteComponent类而没有抽象的Component类，那么Decorator类可以是ConcreteComponent的一个子类。如果只有一个ConcreteDecorator类，那么就没有必要建立一个单独的Decorator类，而可以把Decorator和ConcreteDecorator的责任合并成一个类。
+
+8，Decorator模式的优点是提供了比继承更加灵活的扩展，通过使用不同的具体装饰类以及这些装饰类的排列组合，可以创造出很多不同行为的组合；
+
+
+9，由于使用装饰模式，可以比使用继承关系需要较少数目的类。使用较少的类，当然使设计比较易于进行。但是，在另一方面，使用装饰模式会产生比使用继承关系更多的对象。更多的对象会使得查错变得困难，特别是这些对象看上去都很相像。
+
+
+版权声明：本文为博主原创文章，转载请附上博文链接！
 *** 单例模式
+template<typename T>
+class Singleton
+{
+public:
+    static T* instance(){
+        static T instance;
+        return &instance;
+    }
+
+private:
+    Singleton();
+    ~Singleton();
+    Singleton(const Singleton &);
+    Singleton & operator = (const Singleton &);
+};
+
+
+
+
+//2
+class Lock
+{
+private:       
+	CCriticalSection m_cs;
+public:
+	Lock(CCriticalSection  cs) : m_cs(cs)
+	{
+		m_cs.Lock();
+	}
+	~Lock()
+	{
+		m_cs.Unlock();
+	}
+};
+ 
+
+class Singleton
+{
+private:
+	Singleton();
+	Singleton(const Singleton &);
+	Singleton& operator = (const Singleton &);
+ 
+public:
+	static Singleton *Instantialize();
+	static Singleton *pInstance;
+	static void Destroy();
+	static CCriticalSection cs;
+};
+static void Destroy() {
+    delete instance_;
+}
+Singleton* Singleton::pInstance = 0;
+ 
+Singleton* Singleton::Instantialize()
+{
+	if(pInstance == NULL)
+	{   //double check
+		Lock lock(cs);           //用lock实现线程安全，用资源管理类，实现异常安全
+		//使用资源管理类，在抛出异常的时候，资源管理类对象会被析构，析构总是发生的无论是因为异常抛出还是语句块结束。
+		if(pInstance == NULL)
+		{
+			pInstance = new Singleton();
+			atexit(Destroy);
+		}
+	}
+	return pInstance;
+}
+
+
+//another one
+#ifndef _SINGLETON_H_
+#define _SINGLETON_H_
+
+#include <iostream>
+#include <stdlib.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
+
+using namespace std;
+
+template < typename T > class Singleton
+{
+
+public:
+    static T &GetInstance()
+    {
+        Init();
+        return *instance_;
+    }
+
+private:
+    static void Init()
+    {
+        if (instance_ == 0)
+        {
+
+            pthread_mutex_lock(&g_mutex);
+            if (instance_ == 0)
+            {
+                instance_ = new T;
+                atexit(Destroy);    //程序结束时调用注册的函数
+            }
+            pthread_mutex_unlock(&g_mutex);
+        }
+    }
+
+    static void Destroy()
+    {
+        delete instance_;
+    }
+
+    Singleton(const Singleton &other);
+    Singleton &operator=(const Singleton &other);
+    Singleton();
+    ~Singleton();
+
+    static T * volatile instance_;
+    static pthread_mutex_t g_mutex;
+};
+
+template < typename T >
+T * volatile Singleton < T >::instance_ = 0;
+
+template < typename T >
+pthread_mutex_t Singleton<T> ::g_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+#endif              // _SINGLETON_H_
+
 *** 观察者模式
+//观察者
+class Observer  
+{
+public:
+	Observer() {}
+	virtual ~Observer() {}
+	virtual void Update() {} 
+};
+//博客
+class Blog  
+{
+public:
+	Blog() {}
+	virtual ~Blog() {}
+	void Attach(Observer *observer) { m_observers.push_back(observer); }	 //添加观察者
+	void Remove(Observer *observer) { m_observers.remove(observer); }        //移除观察者
+	void Notify() //通知观察者
+	{
+		list<Observer*>::iterator iter = m_observers.begin();
+		for(; iter != m_observers.end(); iter++)
+			(*iter)->Update();
+	}
+	virtual void SetStatus(string s) { m_status = s; } //设置状态
+	virtual string GetStatus() { return m_status; }    //获得状态
+private:
+	list<Observer* > m_observers; //观察者链表
+protected:
+	string m_status; //状态
+};
+
+//具体博客类
+class BlogCSDN : public Blog
+{
+private:
+	string m_name; //博主名称
+public:
+	BlogCSDN(string name): m_name(name) {}
+	~BlogCSDN() {}
+	void SetStatus(string s) { m_status = "CSDN通知 : " + m_name + s; } //具体设置状态信息
+	string GetStatus() { return m_status; }
+};
+//具体观察者
+class ObserverBlog : public Observer   
+{
+private:
+	string m_name;  //观察者名称
+	Blog *m_blog;   //观察的博客，当然以链表形式更好，就可以观察多个博客
+public: 
+	ObserverBlog(string name,Blog *blog): m_name(name), m_blog(blog) {}
+	~ObserverBlog() {}
+	void Update()  //获得更新状态
+	{ 
+		string status = m_blog->GetStatus();
+		cout<<m_name<<"-------"<<status<<endl;
+	}
+};
+
+//测试案例
+int main()
+{
+	Blog *blog = new BlogCSDN("wuzhekai1985");
+	Observer *observer1 = new ObserverBlog("tutupig", blog);
+	blog->Attach(observer1);
+	blog->SetStatus("发表设计模式C++实现（15）——观察者模式");
+	blog->Notify();
+	delete blog; delete observer1;
+	return 0;
+}
 ** 网络
 *** osi七层模型与tcp/ip四层模型，每卖劲列举两个协议
 *** 客户端向服务器发3个包基于tcp与udp的服务器会收到几个？尽可能考虑到所有情况
@@ -72,11 +299,205 @@ http://www.runoob.com/design-pattern/decorator-pattern.html
 ** 加密与安全
 *** 数字证书机制
 *** 加密方法
-
 *** xss原理
 ** 系统
+*** 进程的地址空间
+- 可执行文件代码的内存映射，称为代码段(text section)
+- 可执行文件的已初始化全局变量的内存映射，称为数据段(data section)
+- 包含未初始化全局变量，也就是bss段的零页(页面中的信息全是0值，故用于bss映射等目的）
+- 每一个诸如c库或动态连接程序等共享库的代码段、数据段bss也会被载入进进程的地址空间
+- 任何内存映射文件
+- 任何共享内存段
+- 任何匿名的内存映射，如malloc()分配的内存。
+*** TLB
+linux内使用一个三级缓存页表来完成虚拟地址到实际地址的映射与查询，但由于搜索内存中的物理地址速度很有限，为了加快搜索，多数体系结构都实现了一个翻译后缓冲器TLB。TLB作为一个将虚拟地址吊射到篁地址的硬件缓存，当请求访问一个虚拟地址时，处理器将首先检查TLB中是否缓存了该虚拟地址到物理地址的映射，如果在缓存中直接命中，物理地址立刻返回，否则，搜索页表。
 *** 协程
 *** 僵尸进程，守护进程？？？？查下定义用什么调用产生
+守护进程：不被打扰，安静地做自己的事
+创建守护进程的函数：
+
+#include<unistd.h>
+
+pid_t setsid(void);
+
+该函数调用成功时返回新创建的Session的id(其实也就是当前进程的id),出错返回-1。
+
+成功调用该函数的结果是:
+
+1. 创建一个新的Session,当前进程成为SessionLeader,当前进程的id就是Session的id。
+
+2. 创建一个新的进程组,当前进程成为进程组的Leader,当前进程的id就是进程组的id。
+
+3. 如果当前进程原本有一个控制终端,则它失去这个控制终端,成为一个没有控制终端的进程。所谓失去控制终端是指,原来的控制终端仍然是打开的,仍然可以读写,但只是一个普通的打开文件而不是控制终端了。
+
+
+创建守护进程的步骤
+
+1、在后台运行。调用fork，父进程退出（exit）。所有工作在子进程中进行，形式上脱离了控制终端。
+
+     原因：1）如果该守护进程是作为一条简单的shell命令启动的，那么父进程终止使得shell认为该命令已经执行完毕。2）保证子进程不是一个进程组的组长进程。
+
+2、脱离控制终端，登录会话和进程组。调用setsid在子进程中创建一个新会话。
+
+     setsid会导致：
+
+     1）调用进程成为新会话的首进程。 2）调用进程成为一个进程组的组长进程 。3）调用进程没有控制终端。（再次fork一次，保证daemon进程，之后不会打开tty设备
+
+3、将当前工作目录更改为根目录。
+
+用chdir（）函数进行，更改目录防止占用可卸载的文件系统，也可以换成其他路径。
+
+4、调用umask将文件模式创建屏蔽字设置为0。
+
+目的：防止继承的文件创建屏蔽字拒绝某权限，增加守护进程灵活性。
+
+5、关闭不在需要的文件描述符。
+
+继承的打开文件不会用到，浪费系统资源，无法卸载；getdtablesize();返回所有文件的文件描述符表的项数，即该进程打开的文件数目。
+
+6、忽略SIGCHLD信号。
+
+         忽略SIGCHLD信号并不是必须的。但对于某些进程，特别是服务器进程往往在请求到来时生成子进程处理请求。如果父进程不等待子进程结束，子进程将成为僵尸进程（zombie）从而占用系统资源。如果父进程等待子进程结束，将增加父进程的负担，影响服务器进程的并发性能。在Linux下可以简单地将SIGCHLD信号的操作设为SIG_IGN。signal(SIGCHLD,SIG_IGN);
+
+7、禁止进程重新打开控制终端
+
+        fork后进程已经成为无终端的会话组长。但它可以重新申请打开一个控制终端。可以通过使进程不再成为会话组长来禁止进程重新打开控制终端：
+
+        if(pid=fork())
+
+       exit(0);//结束第一子进程，第二子进程继续（第二子进程不再是会话组长）
+
+ 
+
+可是在翻阅资料的时候，我们会发现有些博客fork了两次？
+
+第一次fork的作用是为了后面的setsid服务，因为调用setsid函数的进程不能是进程组组长，如果不fork出子进程，则此时的父进程是进程组组长，就无法调用setsid。当子进程调用完setsid函数之后，子进程是会话组长也是进程组组长，并且脱离了控制终端，此时，不管控制终端如何操作，新的进程都不会收到一些信号使得进程退出。
+
+再次fork，终止父进程，保持子进程不是话首进程，从而保证后续不会在和其他终端关联。 第二次不是必须的，是可选的。
+
+        1. Close all open file descriptors except standard input, output,
+           and error (i.e. the first three file descriptors 0, 1, 2). This
+           ensures that no accidentally passed file descriptor stays around
+           in the daemon process. On Linux, this is best implemented by
+           iterating through /proc/self/fd, with a fallback of iterating
+           from file descriptor 3 to the value returned by getrlimit() for
+           RLIMIT_NOFILE.
+
+        2. Reset all signal handlers to their default. This is best done by
+           iterating through the available signals up to the limit of _NSIG
+           and resetting them to SIG_DFL.
+
+        3. Reset the signal mask using sigprocmask().
+
+        4. Sanitize the environment block, removing or resetting environment
+           variables that might negatively impact daemon runtime.
+
+        5. Call fork(), to create a background process.
+
+        6. In the child, call setsid() to detach from any terminal and
+           create an independent session.
+
+        7. In the child, call fork() again, to ensure that the daemon can
+           never re-acquire a terminal again.
+
+        8. Call exit() in the first child, so that only the second child
+           (the actual daemon process) stays around. This ensures that the
+           daemon process is re-parented to init/PID 1, as all daemons
+           should be.
+
+        9. In the daemon process, connect /dev/null to standard input,
+           output, and error.
+
+       10. In the daemon process, reset the umask to 0, so that the file
+           modes passed to open(), mkdir() and suchlike directly control the
+           access mode of the created files and directories.
+
+       11. In the daemon process, change the current directory to the root
+           directory (/), in order to avoid that the daemon involuntarily
+           blocks mount points from being unmounted.
+
+       12. In the daemon process, write the daemon PID (as returned by
+           getpid()) to a PID file, for example /run/foobar.pid (for a
+           hypothetical daemon "foobar") to ensure that the daemon cannot be
+           started more than once. This must be implemented in race-free
+           fashion so that the PID file is only updated when it is verified
+           at the same time that the PID previously stored in the PID file
+           no longer exists or belongs to a foreign process.
+
+       13. In the daemon process, drop privileges, if possible and
+           applicable.
+
+       14. From the daemon process, notify the original process started that
+           initialization is complete. This can be implemented via an
+           unnamed pipe or similar communication channel that is created
+           before the first fork() and hence available in both the original
+           and the daemon process.
+
+       15. Call exit() in the original process. The process that invoked the
+           daemon must be able to rely on that this exit() happens after
+           initialization is complete and all external communication
+           channels are established and accessible.
+////
+
+
+编写守护进程的一般步骤步骤：
+
+（1）在父进程中执行fork并exit推出；
+
+（2）在子进程中调用setsid函数创建新的会话；
+
+（3）在子进程中调用chdir函数，让根目录 ”/” 成为子进程的工作目录；
+
+（4）在子进程中调用umask函数，设置进程的umask为0；
+
+（5）在子进程中关闭任何不需要的文件描述符
+
+说明：
+
+1. 在后台运行。
+为避免挂起控制终端将Daemon放入后台执行。方法是在进程中调用fork使父进程终止，让Daemon在子进程中后台执行。
+if(pid=fork())
+exit(0);//是父进程，结束父进程，子进程继续
+2. 脱离控制终端，登录会话和进程组
+有必要先介绍一下Linux中的进程与控制终端，登录会话和进程组之间的关系：进程属于一个进程组，进程组号（GID）就是进程组长的进程号（PID）。登录会话可以包含多个进程组。这些进程组共享一个控制终端。这个控制终端通常是创建进程的登录终端。
+控制终端，登录会话和进程组通常是从父进程继承下来的。我们的目的就是要摆脱它们，使之不受它们的影响。方法是在第1点的基础上，调用setsid()使进程成为会话组长：
+setsid();
+说明：当进程是会话组长时setsid()调用失败。但第一点已经保证进程不是会话组长。setsid()调用成功后，进程成为新的会话组长和新的进程组长，并与原来的登录会话和进程组脱离。由于会话过程对控制终端的独占性，进程同时与控制终端脱离。
+3. 禁止进程重新打开控制终端
+现在，进程已经成为无终端的会话组长。但它可以重新申请打开一个控制终端。可以通过使进程不再成为会话组长来禁止进程重新打开控制终端：
+if(pid=fork())
+exit(0);//结束第一子进程，第二子进程继续（第二子进程不再是会话组长）
+4. 关闭打开的文件描述符
+进程从创建它的父进程那里继承了打开的文件描述符。如不关闭，将会浪费系统资源，造成进程所在的文件系统无法卸下以及引起无法预料的错误。按如下方法关闭它们：
+for(i=0;i 关闭打开的文件描述符close(i);>
+5. 改变当前工作目录
+进程活动时，其工作目录所在的文件系统不能卸下。一般需要将工作目录改变到根目录。对于需要转储核心，写运行日志的进程将工作目录改变到特定目录如/tmpchdir("/")
+6. 重设文件创建掩模
+进程从创建它的父进程那里继承了文件创建掩模。它可能修改守护进程所创建的文件的存取位。为防止这一点，将文件创建掩模清除：umask(0);
+7. 处理SIGCHLD信号
+处理SIGCHLD信号并不是必须的。但对于某些进程，特别是服务器进程往往在请求到来时生成子进程处理请求。如果父进程不等待子进程结束，子进程将成为僵尸进程（zombie）从而占用系统资源。如果父进程等待子进程结束，将增加父进程的负担，影响服务器进程的并发性能。在Linux下可以简单地将SIGCHLD信号的操作设为SIG_IGN。
+signal(SIGCHLD,SIG_IGN); 
+////
+
+
+　　我们知道在unix/linux中，正常情况下，子进程是通过父进程创建的，子进程在创建新的进程。子进程的结束和父进程的运行是一个异步过程,即父进程永远无法预测子进程 到底什么时候结束。 当一个 进程完成它的工作终止之后，它的父进程需要调用wait()或者waitpid()系统调用取得子进程的终止状态。
+
+　　孤儿进程：一个父进程退出，而它的一个或多个子进程还在运行，那么那些子进程将成为孤儿进程。孤儿进程将被init进程(进程号为1)所收养，并由init进程对它们完成状态收集工作。
+
+　　僵尸进程：一个进程使用fork创建子进程，如果子进程退出，而父进程并没有调用wait或waitpid获取子进程的状态信息，那么子进程的进程描述符仍然保存在系统中。这种进程称之为僵死进程。
+
+3、问题及危害
+
+　　unix提供了一种机制可以保证只要父进程想知道子进程结束时的状态信息， 就可以得到。这种机制就是: 在每个进程退出的时候,内核释放该进程所有的资源,包括打开的文件,占用的内存等。 但是仍然为其保留一定的信息(包括进程号the process ID,退出状态the termination status of the process,运行时间the amount of CPU time taken by the process等)。直到父进程通过wait / waitpid来取时才释放。 但这样就导致了问题，如果进程不调用wait / waitpid的话， 那么保留的那段信息就不会释放，其进程号就会一直被占用，但是系统所能使用的进程号是有限的，如果大量的产生僵死进程，将因为没有可用的进程号而导致系统不能产生新的进程. 此即为僵尸进程的危害，应当避免。
+
+　　孤儿进程是没有父进程的进程，孤儿进程这个重任就落到了init进程身上，init进程就好像是一个民政局，专门负责处理孤儿进程的善后工作。每当出现一个孤儿进程的时候，内核就把孤 儿进程的父进程设置为init，而init进程会循环地wait()它的已经退出的子进程。这样，当一个孤儿进程凄凉地结束了其生命周期的时候，init进程就会代表党和政府出面处理它的一切善后工作。因此孤儿进程并不会有什么危害。
+
+　　任何一个子进程(init除外)在exit()之后，并非马上就消失掉，而是留下一个称为僵尸进程(Zombie)的数据结构，等待父进程处理。这是每个 子进程在结束时都要经过的阶段。如果子进程在exit()之后，父进程没有来得及处理，这时用ps命令就能看到子进程的状态是“Z”。如果父进程能及时 处理，可能用ps命令就来不及看到子进程的僵尸状态，但这并不等于子进程不经过僵尸状态。  如果父进程在子进程结束之前退出，则子进程将由init接管。init将会以父进程的身份对僵尸状态的子进程进行处理。
+
+　　僵尸进程危害场景：
+
+　　例如有个进程，它定期的产 生一个子进程，这个子进程需要做的事情很少，做完它该做的事情之后就退出了，因此这个子进程的生命周期很短，但是，父进程只管生成新的子进程，至于子进程 退出之后的事情，则一概不闻不问，这样，系统运行上一段时间之后，系统中就会存在很多的僵死进程，倘若用ps命令查看的话，就会看到很多状态为Z的进程。 严格地来说，僵死进程并不是问题的根源，罪魁祸首是产生出大量僵死进程的那个父进程。因此，当我们寻求如何消灭系统中大量的僵死进程时，答案就是把产生大 量僵死进程的那个元凶枪毙掉（也就是通过kill发送SIGTERM或者SIGKILL信号啦）。枪毙了元凶进程之后，它产生的僵死进程就变成了孤儿进 程，这些孤儿进程会被init进程接管，init进程会wait()这些孤儿进程，释放它们占用的系统进程表中的资源，这样，这些已经僵死的孤儿进程 就能瞑目而去了。
+
 *** 讲讲同步异步阻塞非阻塞
 *** linux如何从磁盘找文件
 *** 进程与线程区别
@@ -101,6 +522,9 @@ https://sustyuxiao.github.io/2018/04/08/2018-04-08/
 *** linux如何扩大分区
 *** epoll libev优点
 *** epoll、select、poll异同
+https://www.jianshu.com/p/dfd940e7fca2
+https://blog.csdn.net/chen19870707/article/details/42525887
+http://blog.lucode.net/linux/epoll-tutorial.html
 *** 讲一下有名管道与无名管道与UNIX domain sockets
 1、无名管道
 
@@ -157,7 +581,138 @@ llvm中间ir生成各种平台的优化后的代码。clang作为前端解析生
 3. 汇编过程将上一步的汇编代码转换成机器码(machine code)
 4. 链接过程将多个目标文以及所需的库文件(.so等)链接成最终的可执行文件(executable file)
 *** 动态库静态库
+
+ 二者的不同点在于代码被载入的时刻不同。
+
+静态库的代码在编译过程中已经被载入可执行程序,因此体积比较大。
+
+动态库(共享库)的代码在可执行程序运行时才载入内存，在编译过程中仅简单的引用，因此代码体积比较小。
+
+不同的应用程序如果调用相同的库,那么在内存中只需要有一份该动态库(共享库)的实例。
+
+静态库和动态库的最大区别,静态情况下,把库直接加载到程序中,而动态库链接的时候,它只是保留接口,将动态库与程序代码独立,这样就可以提高代码的可复用度，和降低程序的耦合度。
+
+静态库在程序编译时会被连接到目标代码中，程序运行时将不再需要该静态库。
+
+动态库在程序编译时并不会被连接到目标代码中，而是在程序运行是才被载入，因此在程序运行时还需要动态库存在
+
+ 
+
+一  静态库
+
+这类库的名字一般是libxxx.a；利用静态函数库编译成的文件比较大，因为整个 函数库的所有数据都会被整合进目标代码中，他的优点就显而易见了，即编译后的执行程序不需要外部的函数库支持，因为所有使用的函数都已经被编译进去了。当然这也会成为他的缺点，因为如果静态函数库改变了，那么你的程序必须重新编译。
+
+静态库的代码在编译时链接到应用程序中，因此编译时库文件必须存在,并且需要通过“-L”参数传递路径给编译器,应用程序在开始执行时，库函数代码将随程序一起调入进程内存段直到进程结束，其执行过程不需要原静态库存在。
+
+在UNIX中,使用ar命令创建或者操作静态库
+
+ar     archivefile objfile
+
+archivefile：archivefile是静态库的名称
+
+objfile:objfile是已.o为扩展名的中间目标文件名，可以多个并列
+
+参数        意义
+
+-r            将objfile文件插入静态库尾或者替换静态库中同名文件
+
+-x            从静态库文件中抽取文件objfile
+
+-t             打印静态库的成员文件列表
+
+-d            从静态库中删除文件objfile
+
+-s           重置静态库文件索引
+
+-v            创建文件冗余信息
+
+-c            创建静态库文件
+
+ 1.编译成静态库
+
+无论静态库，还是动态库，都是由.o文件创建的。因此，我们必须将源程序hello.c通过gcc先编译成.o文件。
+
+hc@linux-v07j:~/weiming/tt> g++ -o hello.o -c hello.cpp
+
+hc@linux-v07j:~/weiming/tt> ar cqs libHello.a hello.o
+
+hc@linux-v07j:~/weiming/tt> ls
+hello.cpp  hello.h  hello.o  libHello.a  main.cpp
+
+ 2.链接
+
+hc@linux-v07j:~/weiming/tt> g++ main.cpp libHello.a -o Out1  （g++ -o aOut main.cpp ./libHello.a 或者 g++ -o aOut main.cpp  -L./ -lHello）
+
+注意：如果hello() 里面还使用了其他的库函数比如pthread_create，则最后生成Out1 时还需 -lpthread，但ar 时可以不用，只需要在 include 的头文件中找到函数符号声明即可，但最终生成可执行文件时需要找到所有的符号定义。
+
+hc@linux-v07j:~/weiming/tt> ls
+hello.cpp  hello.h  hello.o  libHello.a  main.cpp  Out1
+
+ 
+
+hc@linux-v07j:~/weiming/tt> ldd Out1
+        linux-gate.so.1 =>  (0xffffe000)
+        libstdc++.so.6 => /usr/lib/libstdc++.so.6 (0xb7e36000)
+        libm.so.6 => /lib/libm.so.6 (0xb7e11000)
+        libgcc_s.so.1 => /lib/libgcc_s.so.1 (0xb7e06000)
+        libc.so.6 => /lib/libc.so.6 (0xb7ce3000)
+        /lib/ld-linux.so.2 (0xb7f1b000)
+
+ 
+
+ 
+
+二： 动态库
+
+这类库的名字一般是libxxx.so;相对于静态函数库，动态函数库在编译的时候 并没有被编译进目标代码中，你的程序执行到相关函数时才调用该函数库里的相应函数，因此动态函数库所产生的可执行文件比较小。由于函数库没有被整合进你的程序，而是程序运行时动态的申请并调用，所以程序的运行环境中必须提供相应的库。动态函数库的改变并不影响你的程序，所以动态函数库的升级比较方便
+
+不同的UNIX系统,链接动态库方法，实现细节不一样
+
+
+编译PIC型.o中间文件的方法一般是采用C语言编译器的-KPIC或者-fpic选项,有的UNIX版本C语言编译器默认带上了PIC标准.创建最终动态库的方法一般采用C语言编译器的-G或者-shared选项，或者直接使用工具ld创建。
+
+最主要的是GCC命令行的一个选项:
+-shared 该选项指定生成动态连接库（让连接器生成T类型的导出符号表，有时候也生成弱连接W类型的导出符号），不用该标志外部程序无法连接。相当于一个可执行文件
+-fPIC：表示编译为位置独立的代码，不用此选项的话编译后的代码是位置相关的所以动态载入时是通过代码拷贝的方式来满足不同进程的需要，而不能达到真正代码段共享的目的。（转者注：共享库各段的加载地址并没有定死，可以加载到任意位置，因为指令中没有使用绝对地址（相对于链接后的可执行文件各segment来说），因此称为位置无关代码）
+-L.：表示要连接的库在当前目录中
+-ltest：编译器查找动态连接库时有隐含的命名规则，即在给出的名字前面加上lib，后面加上.so来确定库的名称
+
+ LINUX和其他gcc编译器
+
+g++ -fpic -c d1.cpp d2.cpp     /* 编译为.o为扩展名的中间目标文件d1.o，d2.o*/
+
+g++ -shared -o libd1.so d1.o    /*根据中间目标文件d1.o创建动态库文件d1.so*/
+
+g++ -shared -o libd2.so d2.o    /*根据中间目标文件d2.o创建动态库文件d2.so*/
+
+或者直接一步到位
+
+ g++ -O -fpic -shared -o libd1.so d1.cpp
+
+ g++ -O -fpic -shared -o libd2.so d2.cpp
+
+某些版本的gcc上也可以使用-G替换-shared选项
+
+ 
+
+调用动态库
+
+隐式调用动态库
+
+总之，共享库的搜索路径由动态链接器决定，从ld.so(8)的Man Page可以查到共享库路径的搜索顺序：
+
+1. 首先在环境变量LD_LIBRARY_PATH所记录的路径中查找。
+
+2. 在程序链接时指定的 rpath 中查找，可以  readelf binfile | grep RPATH 。
+
+3. 然后从缓存文件/etc/ld.so.cache中查找。这个缓存文件由/sbin/ldconfig命令读取配置文件/etc/ld.so.conf 之后生成。
+
+（也可以在 ld.so.conf.d 目录下增加 *.conf 文件，里面写入库路径，在 ld.so.conf 中 include ld.so.conf.d/*.conf ）
+4. 如果上述步骤都找不到，则到默认的系统路径中查找，先是/usr/lib然后是/lib。
+https://www.ibm.com/developerworks/cn/linux/l-dynamic-libraries/index.html
+https://www.ibm.com/developerworks/cn/linux/l-cn-linklib/index.html
 *** 栈空间最大值
+
 ulimits -a 
 结果8m
 *** 四种cast各有什么用
@@ -204,7 +759,8 @@ const_cast
 memcpy 不考虑内存重叠问题，效率高，（如已知两块内存不会重叠），memcpy更合适
 memmove考虑内存重叠问题。在dest头部在src范围内时：src的尾部在复制中被修改会出错，memmove加了一次判断，在这种情况下会逆序复制
 *** 获取内存的各种方式（不要忘记栈）
-*** malloc与new的区别
+*** malloc与new 内存 xxxxxxx
+https://chenqx.github.io/2014/09/25/Cpp-Memory-Management/
 *** cout/printf其区别
 *** vector<int>怎么扩容
 *** 什么模板类放在h文件中
@@ -258,18 +814,31 @@ https://sustyuxiao.github.io/2018/03/09/2018-03-09/
 **** forward move
 **** lambda实现原理
 **** c++17 invoke
+**** constexpr
+**** static_assert
+**** emun class
+**** 可变参数模板 ... sizeof...
+**** lambda
+**** for_each
+**** thread
+**** namespace 用来实现类似static的效果  inline namespace实现选择不同的代码
+*** c++11 atomic thread
+**** memory order
+**** happens-before
+其与 dependency-ordered before synchronizes-with synchronizes-with&&sequenced-before sequneced-befire&&inter-thread happends-before inter-thread happens-before&&inter-thread happends-before 
+**** C++11原子操作与无锁编程
+https://zhuanlan.zhihu.com/p/24983412
+https://cloud.tencent.com/developer/article/1005903
+https://blog.csdn.net/cszhouwei/article/details/11730559
+
 *** 重载new？？？
 *** RAII lock_guard
 *** RTTI
-
 RTTI是Runtime Type Identification的缩写，意思是运行时类型识别。C++引入这个机制是为了让程序在运行时能根据基类的指针或引用来获得该指针或引用所指的对象的实际类型。但是现在RTTI的类型识别已经不限于此了，它还能通过typeid操作符识别出所有的基本类型（int，指针等）的变量对应的类型。
 C++通过以下的两个操作提供RTTI：
 （1）typeid运算符，该运算符返回其表达式或类型名的实际类型。
 （2）dynamic_cast运算符，该运算符将基类的指针或引用安全地转换为派生类类型的指针或引用。
 多态类的type_info指针放在虚表的-1位，实现了多态类的类型识别。
-
-
-
 *** c++中可睡眠的锁
 *** 模板成员函数能否是虚函数
 *** stl库分为哪几块
@@ -281,19 +850,206 @@ C++通过以下的两个操作提供RTTI：
 - 接口的直观性，参数简洁
 - 效率， sort的第二个参数comp为仿函数时，将对仿函数调用内联，减少函数调用开销。
 ** database
+*** 数据库内部一致性和外部一致性
+“内部一致性”搞数据库的人很少这么说，一般就直接说一致性，更准确的说是“Consistency in ACID”（“事务 ACID 属性中的一致性”）。需要跟分布式领域的 Consistency 做一下澄清。自从云计算蓬勃发展之后，集群环境下的数据库服务越来越平民化，数据库和分布式原本两个有交集但交集不多的领域开始水乳交融，也就出现了名词打架的现象。打的最厉害的荣耀王者就是“Consistency”（一致性）。事务的 ACID 属性中有一个 C 是 Consistency，表示事务的执行一定保证数据库中数据的约束不被破坏。而分布式领域提及的 Consistency 表示系统的正确性模型，著名的也是臭名昭著的 CAP 理论中的 C 就是这个范畴的。CAP 理论的 Consistency 严格指 Linearizability[1] 这个一致性模型，与 ACID 中的 Consistency 没有半毛钱关系，如果你听到有个搞数据库的砖家大吹因为 CAP 理论所以分布式数据库无法保证事务 ACID 的 Consistency，那就别再跟他浪费时间，还不如打王者荣耀更有收获。题目中的“内部一致性”指的也仅指“Consistency in ACID”。“外部一致性”的定义是准确的，Gifford 老爷子在他 1981 年的博士毕业论文[2]里 3.1 节，先是定义了 Serializability（可串行化），然后定义了“External Consistency”（外部一致性），指的是符合绝对时间约束的 Serializability。定义清楚了，也就能看出来“Consistency in ACID”和“External Consistency”是用来描述不同问题的两个概念，分别是事务 ACID 属性中的 C（一致性） 和 I（隔离性）。“Consistency in ACID”是事务提供的非常强有力的功能，它的核心是“约束”，而这个“约束”由数据库的使用者告诉数据库，使用者要求数据一定是符合这样或者那样的约束条件。当数据发生修改时，数据库会检查数据是否还符合约束条件，如果约束条件不再被满足，那么修改操作不会发生。关系数据库最常见的两类约束是“唯一性约束”和“完整性约束”，表格中定义的主键和唯一键都保证了指定的数据项绝不会出现重复，表格之间定义的参照完整性也保证了同一个属性在不同表格中的一致性。“Consistency in ACID”是如此的好用，以至于已经融化在大部分使用者的血液里了，使用者会在表格设计的时候自觉的加上需要的约束条件，数据库也会严格的执行这个约束条件。这就好像国家的计划生育政策，祖国规定了每个家庭最多只能生育两个孩子，那每个人都需要遵守。能不能生是能力问题，遵不遵守是...呃，就是必须遵守。“External Consistency”的核心是“并发控制”。当数据库系统从批量处理进化到在线实时系统后，事务就可以并发地在数据库上进行操作，在给使用者带来便利的同时也给数据库系统开发人员带来了诸多困难。严肃的数据库系统都会有一套复杂的并发控制机制来保证事务并行执行时数据的正确性。事务 Isolation（隔离性）最大的烦恼来自并发控制对性能的影响，最严格的隔离性 Serializability 保证了所有的事务虽然是并发执行，但是最终执行的结果跟事务一个个串行着做是一样的，可串行化保证了一定不会因为并发进行的事务导致数据出错，但是这也会导致事务有更多等待或者失败。其他常见的隔离级别还有 Repeatable Read、 Read Committed 和 Snapshot Isolation，他们都比 Serializability 要弱，并不能保证事务一个个顺着做，换句话说，事务执行过程中能感受到它自己不是一个人在战（执）斗（行）。常见的隔离级别里面没有 External Consistency，因为一般不怎么需要这个级别，尤其是在单机数据库系统里。实际上 External Consistency 比 Serializability 更严格。Serializability 已经保证了事务是一个个串行做的了，怎么还有更严格的保证呢？还真有，External Consistency 除了在串行做之上，还对事务串行的排列顺序提出了更多的要求。要求是这样的，如果一个事务 A 已经完成了，另一个事务 B 才开始，那么事务 B 在数据库里修改的数据的生效时间一定要在事务 A 的生效时间之后。这是一句废话吗？对于常见的单机数据库，这确实是废话，因为保证 A、B 的先后关系不费吹灰之力，所以一般单机数据库系统都隐含保证了这一点。但是在分布式数据库里，当 A、B 两个事务发生在不同的机器上时，保证先后关系是非常困难的，所以才用 External Consistency 专门描述这种特性得到了保证。实际上，Helihy 也曾经在 Linearizability 的论文[1]里讨论了 Strict Serializability，也是在 Serializability 的基础上加上了绝对时间的约束。所以，External Consistency 和 Strict Serializability 是完全等价的。至于为什么在分布式系统中保证 External Consistency 很难，值得在另一个话题中讨论。有一点让很多人疑惑的是，为什么 Serializability 最初没有加入绝对时间的约束，而是允许一些看似不合理的现象发生，例如，先成功写入一条数据，再用一个只读事务读这个数据，结果返回不存在，这样的行为并不违反 Serializability，神不神奇。只是现在主流的数据库都不会做得这么二，所以大多数人也无从感知。可是，从严谨的学术定义上，Serializability 就是这么二，现在的科研人员也已经不清楚当初的数据库众神是怎么想的了[3]。终于，完成了这两个概念的解释，列一些文章给你参考：[1] Linearizability: A Correctness Condition for Concurrent Objects [2] Information Storage in a Decentralized Computer System[3] Linearizability versus Serializability
+*** 四种数据隔离
+https://comedsh.iteye.com/blog/698733
+一 数据库事务处理中出现的数据不一致的情况
+
+在多个事务并发做数据库操作的时候，如果没有有效的避免机制，就会出现种种问题。大体上有四种问题，归结如下：
+
+1、丢失更新  
+如果两个事务都要更新数据库一个字段X，x=100
+事务A 事务B
+读取X＝100 读取X＝100
+写入x＝X+100 写入x＝X+200
+事务结束x=200 事务结束x=300
+最后x=300
+
+两个不同事物同时获得相同数据，然后在各自事务中同时修改了该数据，那么先提交的事务更新会被后提交事务的更新给覆盖掉，这种情况事务A的更新就被覆盖掉了、丢失了。
+
+2、脏读（未提交读）
+防止一个事务读到另一个事务还没有提交的记录。 如：
+事务A   事务B
+写入x＝X+100 （x=200）
+读取X＝200 （读取了事务B未提交的数据）    
+事务回滚x=100 
+事务结束x=100
+事务结束  
+
+事务读取了未提交的数据，事务B的回滚，导致了事务A的数据不一致，导致了事务A的脏读 ！
+
+3、不可重复读
+一个事务在自己没有更新数据库数据的情况，同一个查询操作执行两次或多次的结果应该是一致的；如果不一致，就说明为不可重复读。
+还是用上面的例子
+事务A 事务B
+读取X＝100 读取X＝100
+读取X＝100 写入x＝X+100
+事务结束， x=200
+读取X＝200
+（此时，在同一个事务A中，读取的X值发生了变化！）  
+事务结束  
+
+这种情况事务A多次读取x的结果出现了不一致，即为不可重复读 。
+
+4 幻读（Phantom Read）
+
+事务A读的时候读出了15条记录，事务B在事务A执行的过程中 增加 了1条，事务A再读的时候就变成了 16 条，这种情况就叫做幻影读。
+不可重复读说明了做数据库读操作的时候可能会出现的问题。
+
+二 事务隔离级别通过锁的实现机制
+
+两个锁：
+
+排他锁 被加锁的对象只能被持有锁的事务读取和修改，其他事务无法在该对象上加其他锁，也不能读取和修改该对象
+共享锁 被加锁的对象可以被持锁事务读取，但是不能被修改，其他事务也可以在上面再加共享锁。
+
+ 
+
+特别的，对共享锁： 如果两个事务对同一个资源上了共享锁，事务A 想更新该数据，那么它必须等待 事务B 释放其共享锁。
+
+在运用 排他锁 和 共享锁 对数据对象加锁时，还需要约定一些规则，例如何时申请 排他锁 或 共享锁、持锁时间、何时释放等。称这些规则为封锁协议（Locking Protocol）。对封锁方式规定不同的规则，就形成了各种不同的封锁协议。
+
+1、一级封锁协议 (对应 read uncommited) 　　
+     一级封锁协议是：事务 在对需要修改的数据上面（就是在发生修改的瞬间） 对其加共享锁（其他事务不能更改，但是可以读取-导致“脏读”），直到事务结束才释放。事务结束包括正常结束（COMMIT）和非正常结束（ROLLBACK）。
+     一级封锁协议不能避免 丢失更新，脏读，不可重复读，幻读！
+
+2、二级封锁协议 （对应read commited)　
+     二级封锁协议是：1）事务 在对需要更新的数据 上（就是发生更新的瞬间） 加 排他锁 （直到事务结束） ， 防止其他事务读取未提交的数据，这样，也就避免了 “脏读” 的情况。2）事务 对当前被读取的数据 上面加共享锁 （当读到时加上共享锁），一旦读完该行，立即 释放该 该行的共享锁 - 从数据库的底层实现更深入的来理解，既是，数据库会对游标当前的数据上加共享锁 ， 但是当游标离开当前行的时候，立即释放该行的共享锁。　
+     二级封锁协议除防止了“脏读”数据，但是不能避免 丢失更新，不可重复读，幻读 。
+
+     但在二级封锁协议中，由于读完数据后立即 释放共享锁，所以它不能避免可重复读 ，同时它也不能避免 丢失更新 ，如果事务A、B同时获取资源X，然后事务A先发起更新记录X，那么 事务B 将等待事务 A 执行完成，然后获得记录X 的排他锁，进行更改。这样事务 A 的更新将会被丢失。 具体情况如下：
+
+ 
+     事务A 事务B
+     读取X=100（同时上共享锁） 读取X=100（同时上共享锁）
+     读取成功（释放共享锁） 读取成功（释放共享锁）
+     UPDATE X=X+100 （上排他锁）  
+     UPDATING A（等待事务A释放对X的排他锁）
+     事务成功（释放排他锁）X=200  
+     UPDATE X=X+200（成功上排他锁）
+     事务成功（释放排他锁）X=300
+
+ 
+
+由此可以看到，事务A的提交被事务B覆盖了，所以不能防止 丢失更新。
+如果要避免 丢失更新，我们需要额外的操作， 对凡是读到的数据加 共享锁 和排他锁 ，这个往往需要程序员自己编程实现，比如在Oracle 中，需要加 SELECT FOR UPDATE 语句，表明，凡是该事务读到的数据，额外的加上排他锁，防止其他数据同一时间获取相同数据，这样就防止了 丢失更新 ！
+
+3、三级封锁协议 （对应reapetable read ）
+      三级封锁协议是：二级封锁协议加上事务 在读取数据的瞬间 必须先对其加 共享锁 ，但是 直到事务结束才释放 ，这样保证了可重复读（既是其他的事务职能读取该数据，但是不能更新该数据）。　
+      三级封锁协议除防止了“脏”数据 和不可重复读 。但是这种情况不能避免 幻读 和 丢失更新 的情况，在事务 A 没有完成之前，事务 B 可以新增数据，那么 当事务 A 再次读取的时候，事务B 新增的数据会被读取到，这样，在该封锁协议下，幻读 就产生了。 如果事务A 和 事务B 同时读取了资源X=100，同样，如果事务A先对X进行 更新X=X+100，等待事务A执行完成X=200，那么事务B 获得X的排他锁，进行更新 X=X+200，然后提交 X=300，同样A的更新被B所覆盖！( 如果要避免 丢失更新，我们需要额外的操作， 对凡是读到的数据加 共享锁 和排他锁 ，这个往往需要程序员自己编程实现，比如在Oracle 中，需要加 SELECT FOR UPDATE 语句，表明，凡是读到的数据，我会加 排他锁，防止其他数据同一时间获取相同数据) ！
+
+      进阶：repeatable read 导致死锁的情况（即便是 不同的资源在相同的顺序下获取）。 比如 事务1 读取 A，同时 事务2 也读取 A，那么事务1和事务2 同时对 A 上了共享锁，然后事务1 要UPDATE A，而此时 事务2 也要 UPDATE A，这个时候 事务1 等待 事务2 释放其在 A 上的共享锁，然后 事务2 要等待 事务1 释放其在 A 上的共享锁，这样，事务1 和 事务2 相互等待，产生死锁！（SQL Server/DB2 里面有 UPDATE LOCK 可以解决这种情况，具体的思路是，在 repeatable read 的情况下，将读取的数据 上的 UPDATE 锁，介于 共享锁 和 排他锁之间的一种锁，该锁的作用是 当出现上面这种情况后，事务1 和 事务2 对 A 上的是 UPDATE 锁，那么谁先 要修改 A，那么该事务就会将 UPDATE 锁可以顺利升级为 排他锁对该数据进行修改！）
+
+ 
+
+4、最强封锁协议（对应Serialization)
+
+      四级封锁协议是对三级封锁协议的增强，其实现机制也最为简单，直接对 事务中 所 读取 或者 更改的数据所在的表加表锁，也就是说，其他事务不能 读写 该表中的任何数据。这样所有的 脏读，不可重复读，幻读 ，都得以避免！
+
+ 
+
+三 附Oracle 事务一致性原则
+        事务是定义和维护一致性的单位，封锁就是要保证这种一致性。如果  
+对封锁的要求高会增加开销，降低并发性和效率；有的事务并不严格要求  
+结果的质量（如用于统计的事务），如果加上严格的封锁则是不必要和不  
+经济的。因此有必要进行进一步的分析，考察不同级别的一致性对数据库  
+数据的质量及并行能力的影响。  
+        一致性级别定义为如下的几个条件：  
+    (1)   事务不修改其它任何事务的脏数据。脏数据是被其它事务修改过，  
+但尚未提交的数据。  
+    (2)   在事务结束前不对被修改的资源解锁。  
+    (3)   事务不读其它任何事务的脏数据。  
+    (4)   在读前对数据加共享锁（RS）和行排它锁，直至事务结束。  
+            *   满足条件1的事务叫第0级事务。  
+            *   满足条件1和2的事务叫第1级一致性事务。  
+            *   满足条件1、2和3的事务为2级一致性事务。ORACLE的读一致性保  
+证了事务不读其它事务的脏数据。  
+            *   满足条件1、2、3和4的事务叫第3级一致性事务。  
+        由ORACLE的三个性质：自动加隐式锁、在事务结束时释放锁和读一致  
+性，使ORACLE成为自动满足以上的0、1和2级一致性事务。因此，ORACLE  
+自动防止了脏读（写-读依赖）。但是，ORACLE不能自动防止丢失修改（写  
+-写依赖），读的不可重复性（读-写依赖），彻底解决并发性中的问题还  
+需满足第4个条件（3级一致性事务），这需要程序员根据实际情况编程。  
+方法如下：
+        *   如果想在一段时间内使一些数据不被其它事务改变，且在本事务内  
+            仅仅查询数据，则可用SET   TRANSACTION   READ   ONLY   语句达到这一  
+            目的。  
+        *   如果想在一事务内修改一数据，且避免丢失修改，则应在读这一数  
+            据前用SELECT   FOR   UPDATE对该数据加锁。  
+        *   如果想在一事务内读一数据，且想基于这一数据对其它数据修改，  
+            则应在读数据前对此数据用SELECT   FOR   UPDATE加锁。对此种类型  
+            的应用，用这条SQL语句加锁最恰当。  
+        *   如果想避免不可重复读现象，可在读前用SELECT   FOR   UPDATE对数  
+            据加锁，或用SET   TRANSACTION   READ   ONLY设置只读事务。  
+
+ 
+
+四， 特殊情况
+1) Read-Commit 的行锁导致其他事务一直被 hanging on的情况！
+
+假设我们有 VARIANT 表， Trasaction A 对 Variant 中的字段 VariantName 1 进行了修改，但是事务未提交（假设，该事务将执行1个小时），此时 Trasaction B 要读VariantName（查询某一个VariantName 2 )，此时它会一直被Transaction A 阻塞，直到Transaction A 提交对 VariantName 的修改后，Transaction B才会得到VariantName 2 的查询结果，这样Transaction B最长可被阻塞1个小时！
+
+这里，虽然Transaction A是针对 VariantName 1 上的修改，而 Transaction B 是读取 VariantName 2 , 对应的Variant Name不一样，但是此时，Transaction B并不知道 Transaction A 的结果（对Transaction B而言，它不清楚Transaction A提交的结果是什么），为了避免“脏读”，Transaction B会等待 Transaction A执行完事务以后，完成它对VariantName的修改后，才返回结果！
+
+ 
+
+所以，在一个事务中，我们应该尽量把 SELECT Queries 放到最前面，把所有的 Update 放到最后面，避免不必要的等待！
+
+ 
+
+特别的，如果上面这种情况，VariantName是Unique Index或者是Primary Key, 这个时候，Transaction B不会被Transaction A 阻塞！因为 Transaction B 知道 Transaction A提交的更改不会影响 他获取的VariantName 2 因为Transaction B 知道 VariantName 2 是唯一的！
+
 *** 索引的实现方式
+https://blog.csdn.net/kennyrose/article/details/7532032
+https://blog.csdn.net/suifeng3051/article/details/52669644
+https://blog.csdn.net/weiliangliang111/article/details/51333169
+https://zhuanlan.zhihu.com/p/23624390
 *** 事务的实现方式
+https://www.jianshu.com/p/2af078f4cc5d
+https://draveness.me/mysql-transaction
+https://www.jianshu.com/p/d75ecc545fda
 *** 三大范式
 *** sql优化方法
-*** 数据库的裊
+*** acid
+ACID是事务的四个特性，指的是atomicity，原子性；consistency，一致性；isolation，隔离性；durability，持久性。
+
+原子性
+整个事务中的所有操作，要么全部完成，要么全部不完成，不可能停滞在中间某个环节。事务在执行过程中发生错误，会被回滚（Rollback）到事务开始前的状态，就像这个事务从来没有执行过一样。
+
+一致性
+一个事务可以封装状态改变（除非它是一个只读的）。事务必须始终保持系统处于一致的状态，不管在任何给定的时间并发事务有多少。
+也就是说：如果事务是并发多个，系统也必须如同串行事务一样操作。其主要特征是保护性和不变性(Preserving an Invariant)，以转账案例为例，假设有五个账户，每个账户余额是100元，那么五个账户总额是500元，如果在这个5个账户之间同时发生多个转账，无论并发多少个，比如在A与B账户之间转账5元，在C与D账户之间转账10元，在B与E之间转账15元，五个账户总额也应该还是500元，这就是保护性和不变性。
+
+隔离性
+隔离状态执行事务，使它们好像是系统在给定时间内执行的唯一操作。如果有两个事务，运行在相同的时间内，执行相同的功能，事务的隔离性将确保每一事务在系统中认为只有该事务在使用系统。这种属性有时称为串行化，为了防止事务操作间的混淆，必须串行化或序列化请求，使得在同一时间仅有一个请求用于同一数据。
+
+持久性
+在事务完成以后，该事务对数据库所作的更改便持久的保存在数据库之中，并不会被回滚。
+由于一项操作通常会包含许多子操作，而这些子操作可能会因为硬件的损坏或其他因素产生问题，要正确实现ACID并不容易。ACID建议数据库将所有需要更新以及修改的资料一次操作完毕，但实际上并不可行。
+目前主要有两种方式实现ACID：第一种是Write ahead logging，也就是日志式的方式(现代数据库均基于这种方式)。第二种是Shadow paging。
+相对于WAL（write ahead logging）技术，shadow paging技术实现起来比较简单，消除了写日志记录的开销恢复的速度也快(不需要redo和undo)。shadow paging的缺点就是事务提交时要输出多个块，这使得提交的开销很大，而且以块为单位，很难应用到允许多个事务并发执行的情况——这是它致命的缺点。
+WAL 的中心思想是对数据文件 的修改（它们是表和索引的载体）必须是只能发生在这些修改已经 记录了日志之后 -- 也就是说，在日志记录冲刷到永久存储器之后． 如果我们遵循这个过程，那么我们就不需要在每次事务提交的时候 都把数据页冲刷到磁盘，因为我们知道在出现崩溃的情况下， 我们可以用日志来恢复数据库：任何尚未附加到数据页的记录 都将先从日志记录中重做（这叫向前滚动恢复，也叫做 REDO） 然后那些未提交的事务做的修改将被从数据页中删除 （这叫向后滚动恢复 - UNDO）。
 ** misc
 *** 查看函数用的内存
 *** 查看进程、线程、函数的cpu占用
 *** mongodb与mysql差别，sql、nosql区别使用场景
+*** 系统瓶颈怎么查看
 *** 内存泄漏怎么解决 
-* 项目
-* blog
+valgrind
+https://www.ibm.com/developerworks/cn/linux/l-cn-valgrind/index.html
+https://www.ibm.com/developerworks/cn/linux/l-cn-memleak/index.html
 * 分布式系统
+** cap
+CAP定理
+CAP理论主要是针对分布式存储系统的，C是指Consistency一致性，A是指Availability可用性，P是指Partition tolerance分区容忍性。CAP定理认为分布式系统中这三个特性最多只能同时满足两个特性。下面我们来分别看下这三个特性究竟是什么意思。
+
+一致性(Consistency): 指在分布式系统中的所有数据备份，在同一时刻是否同样的值。（等同于所有节点访问同一份最新的数据副本）
+可用性(Availability): 在集群中一部分节点故障后，集群整体是否还能响应客户端的读写请求。（对数据更新具备高可用性）
+分区容忍性(Partition tolerance): 即当节点之间无法正常通信时，就产生了分区，而分区产生后，依然能够保证服务可用，那么我们就说系统是分区容忍的。显然如果节点越多，且备份越多，分区容忍度就越高（因为即便是其中一个或多个节点挂了，仍然有其它节点和备份可用）。
+
+那么，为什么说三个特性无法全部保证呢？首先，假如我们要保证分区容忍性，必然要做多个副本节点，而这必然会带来一致性的问题，即保证多个节点的数据是相同的，但是，要让多个节点数据相同，就必须要花时间去复制数据，这还是能够正常通信的情况下，那么在数据复制的过程中为了保持一致性，就不能对外提供服务，所以这段时间就无法满足可用性的问题。
+实际工程通常会采取一些折中措施，比如并不保证强一致性，只保证最终一致性，什么意思呢？比如，有三个数据节点互为备份，某份数据在节点A更改后，需要将更改复制到节点B和C，假设复制过程中，有客户访问该数据，那么此时不保证是一致的，即访问A节点的用户得到的是最新数据，而访问B和C节点的用户得到是老数据，但是最终，数据会复制完成，所以最终A、B、C三个节点的数据是一致的。（比如像文章点赞这种数据，延迟下也没有关系啦）
 ** 分布式系统分片极限
 ** 怎么解决副本一致
 ** 分布式缓存设计
@@ -301,6 +1057,10 @@ C++通过以下的两个操作提供RTTI：
 ** zookeeper原理
 ** 二次提交等保证分布式一致性的算法
 为了解决这种分布式一致性问题，前人在性能和数据一致性的反反复复权衡过程中总结了许多典型的协议和算法。其中比较著名的有二阶提交协议（Two Phase Commitment Protocol）、三阶提交协议（Three Phase Commitment Protocol）和Paxos算法。
+raft paxos
+https://ramcloud.stanford.edu/~ongaro/userstudy/
+https://www.cnblogs.com/linbingdong/p/6253479.html
+https://zhuanlan.zhihu.com/p/31780743
 ** 大数据架构（kafka storm spark)
 * 工具框架源码阅读
 ** redis
