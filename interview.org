@@ -581,8 +581,7 @@ llvm中间ir生成各种平台的优化后的代码。clang作为前端解析生
 3. 汇编过程将上一步的汇编代码转换成机器码(machine code)
 4. 链接过程将多个目标文以及所需的库文件(.so等)链接成最终的可执行文件(executable file)
 *** 动态库静态库
-
- 二者的不同点在于代码被载入的时刻不同。
+   二者的不同点在于代码被载入的时刻不同。
 
 静态库的代码在编译过程中已经被载入可执行程序,因此体积比较大。
 
@@ -709,8 +708,10 @@ g++ -shared -o libd2.so d2.o    /*根据中间目标文件d2.o创建动态库文
 
 （也可以在 ld.so.conf.d 目录下增加 *.conf 文件，里面写入库路径，在 ld.so.conf 中 include ld.so.conf.d/*.conf ）
 4. 如果上述步骤都找不到，则到默认的系统路径中查找，先是/usr/lib然后是/lib。
+
 https://www.ibm.com/developerworks/cn/linux/l-dynamic-libraries/index.html
 https://www.ibm.com/developerworks/cn/linux/l-cn-linklib/index.html
+
 *** 栈空间最大值
 
 ulimits -a 
@@ -822,6 +823,7 @@ https://sustyuxiao.github.io/2018/03/09/2018-03-09/
 **** for_each
 **** thread
 **** namespace 用来实现类似static的效果  inline namespace实现选择不同的代码
+
 *** c++11 atomic thread
 **** memory order
 **** happens-before
@@ -866,6 +868,7 @@ https://comedsh.iteye.com/blog/698733
 事务结束x=200 事务结束x=300
 最后x=300
 
+
 两个不同事物同时获得相同数据，然后在各自事务中同时修改了该数据，那么先提交的事务更新会被后提交事务的更新给覆盖掉，这种情况事务A的更新就被覆盖掉了、丢失了。
 
 2、脏读（未提交读）
@@ -876,6 +879,7 @@ https://comedsh.iteye.com/blog/698733
 事务回滚x=100 
 事务结束x=100
 事务结束  
+
 
 事务读取了未提交的数据，事务B的回滚，导致了事务A的数据不一致，导致了事务A的脏读 ！
 
