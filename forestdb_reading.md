@@ -81,29 +81,6 @@ BlockCacheItem类：包含了被管理的block的bid、addr、flag（block是否
 BlockCacheShard类：管理一个<bid, BlockCacheItem*>的hash_map（allBlocks:all cached blocks），两个<bid, BlockCacheItem*>的tree_map(dirtyDataBlocks:for dirty data blocks、 dirtyIndexBlocks: for dirty index Blocks), 一个列表cleanBlocks：for clean blocks。
 
 - bnode.h、bnode.cc
-BsaItem用于Bnode(BsArray)和Btree的键值对，用于array中，带array中的offset值，value可以是与key一起存储的二进制，也可以是指针，用isValueChildPtr区分。
-BsaKvMeta kvPos（Position of key-value pair.）
-        isPtr（Boolean flag indicates if corresponding key-value pair contains the pointer to a dirty inner child node (true),  otherwise false.）
-        isDirtyChildTree（  Boolean flag indicates if corresponding key-value pair  contains the pointer to a dirty root node of next level child  tree (true), otherwise false. Since the pointer to the next root  node is treated as a (wrapped) value in B+tree level, 'isPtr'  value will not be set to true together.）
-
-BsArray：
- * | <--                  arrayCapacity                --> |
- * |      |  <---        kvDataSize      --->  |           |
- * +------+-------+-------+-----------+--------+-----------+
- * | meta |  KV 0 |  KV 1 |    ...    | KV n-1 |   empty   |
- * +------+-------+-------+-----------+--------+-----------+
- * meta 为KvMeta的array。
-  * kvMeta[i].kvPos: location of KV i, excluding the memory region for 'meta'.
- *                  'kvPos' value starts from zero.
- *   e.g.)
- *   arrayBaseOffset = 15
- *   kvMeta[0].kvPos = 0
- *   kvMeta[1].kvPos = 20
- * then, 'KV 0' is located at dataArray+15,
- * and   'KV 1' is located at dataArray+15+20.
- *
- * kvMeta[i].isPtr: boolean flag that indicates if
- *                  KV i contains pointer (true) or binary data (false).
 
  # btree.h/cc btree_new.h/cc
 这应该是两个版本的b树，新版本中的b树实现有什么不同之处呢？
